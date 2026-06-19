@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import time
+from contextlib import suppress
 from enum import Enum
 from typing import Optional, Tuple
 
@@ -22,10 +23,7 @@ class HmacAlgorithm(str, Enum):
             "hmacsha512": cls.SHA512,
         }
         if normalized not in mapping:
-            raise ValueError(
-                f"Unsupported algorithm: {value}. "
-                f"Supported: {[a.value for a in cls]}"
-            )
+            raise ValueError(f"Unsupported algorithm: {value}. Supported: {[a.value for a in cls]}")
         return mapping[normalized]
 
 
@@ -91,10 +89,8 @@ class SignatureVerifier:
         for part in parts:
             part = part.strip()
             if part.startswith("t="):
-                try:
+                with suppress(ValueError, IndexError):
                     timestamp = int(part[2:])
-                except (ValueError, IndexError):
-                    pass
             elif part.startswith("sig="):
                 signature = part[4:]
 

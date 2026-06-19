@@ -29,8 +29,15 @@ class SqliteStorageBackend(StorageBackend):
     ]
 
     COLUMNS = (
-        "id", "url", "method", "headers", "body",
-        "timestamp", "status", "original_signature", "signature_header",
+        "id",
+        "url",
+        "method",
+        "headers",
+        "body",
+        "timestamp",
+        "status",
+        "original_signature",
+        "signature_header",
     )
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -91,8 +98,7 @@ class SqliteStorageBackend(StorageBackend):
         placeholders = ", ".join("?" for _ in self.COLUMNS)
         with self._get_connection() as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO webhook_requests ({', '.join(self.COLUMNS)}) "
-                f"VALUES ({placeholders})",
+                f"INSERT OR REPLACE INTO webhook_requests ({', '.join(self.COLUMNS)}) VALUES ({placeholders})",
                 self._row_to_params(row),
             )
             conn.commit()

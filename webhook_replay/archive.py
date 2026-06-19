@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from typing import Dict, Optional
-from urllib.parse import urlparse
 
 from .models import WebhookRequest, WebhookStatus
 from .storage import Storage
@@ -35,7 +34,9 @@ class WebhookArchiver:
         self.storage.save_request(request)
         return request
 
-    def archive_from_json_file(self, file_path: Path, url: str, signature_header: str = "X-Webhook-Signature") -> WebhookRequest:
+    def archive_from_json_file(
+        self, file_path: Path, url: str, signature_header: str = "X-Webhook-Signature"
+    ) -> WebhookRequest:
         with open(file_path, "r") as f:
             content = f.read()
 

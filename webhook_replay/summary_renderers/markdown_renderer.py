@@ -23,12 +23,14 @@ class MarkdownSummaryRenderer(SummaryRenderer):
         ]
 
         if summary.failed_count > 0:
-            lines.extend([
-                "## Failed Requests",
-                "",
-                "| Request ID | Status Code | Error Message | Duration |",
-                "|------------|-------------|---------------|----------|",
-            ])
+            lines.extend(
+                [
+                    "## Failed Requests",
+                    "",
+                    "| Request ID | Status Code | Error Message | Duration |",
+                    "|------------|-------------|---------------|----------|",
+                ]
+            )
             for req_id, result in summary.results.items():
                 if not result.success:
                     status = result.status_code or "Error"
@@ -37,12 +39,14 @@ class MarkdownSummaryRenderer(SummaryRenderer):
             lines.append("")
 
         if summary.success_count > 0:
-            lines.extend([
-                "## Successful Requests",
-                "",
-                "| Request ID | Status Code | Duration |",
-                "|------------|-------------|----------|",
-            ])
+            lines.extend(
+                [
+                    "## Successful Requests",
+                    "",
+                    "| Request ID | Status Code | Duration |",
+                    "|------------|-------------|----------|",
+                ]
+            )
             for req_id, result in summary.results.items():
                 if result.success:
                     lines.append(f"| `{req_id}` | {result.status_code} | {result.duration_ms}ms |")

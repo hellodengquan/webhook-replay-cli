@@ -4,10 +4,10 @@ import hmac
 import pytest
 
 from webhook_replay.signature import (
+    SUPPORTED_ALGORITHMS,
     HmacAlgorithm,
     SignatureGenerator,
     SignatureVerifier,
-    SUPPORTED_ALGORITHMS,
 )
 
 
@@ -204,7 +204,6 @@ class TestSignatureVerifierSha512:
 class TestCrossAlgorithmIsolation:
     def test_sha1_sig_fails_sha256_verify(self):
         gen1 = SignatureGenerator("key", HmacAlgorithm.SHA1)
-        gen2 = SignatureGenerator("key", HmacAlgorithm.SHA256)
         header1 = gen1.generate_header_value("body")
         verifier = SignatureVerifier()
         assert verifier.verify("body", header1, "key", algorithm=HmacAlgorithm.SHA256) is False

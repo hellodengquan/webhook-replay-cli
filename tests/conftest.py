@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from webhook_replay.models import (
-    ArchiveFilter,
     ReplayResult,
     ReplaySummary,
     WebhookRequest,

@@ -1,5 +1,4 @@
 import json
-import re
 
 import pytest
 
@@ -98,14 +97,14 @@ class TestJsonRendererOutput:
         parsed = json.loads(renderer.render(all_failed_summary))
         assert parsed["success_count"] == 0
         assert parsed["failed_count"] == 2
-        for rid, result in parsed["results"].items():
+        for _rid, result in parsed["results"].items():
             assert result["success"] is False
 
     def test_json_all_success(self, renderer: JsonSummaryRenderer, all_success_summary):
         parsed = json.loads(renderer.render(all_success_summary))
         assert parsed["failed_count"] == 0
         assert parsed["success_count"] == 1
-        for rid, result in parsed["results"].items():
+        for _rid, result in parsed["results"].items():
             assert result["success"] is True
 
     def test_json_ensure_ascii_false(self, renderer: JsonSummaryRenderer, sample_summary):
@@ -190,8 +189,9 @@ class TestMarkdownRendererOutput:
         assert "## Successful Requests" not in output
 
     def test_pipe_char_escaped_in_error_message(self, renderer: MarkdownSummaryRenderer):
-        from webhook_replay.models import ReplayResult, ReplaySummary
         from datetime import datetime
+
+        from webhook_replay.models import ReplayResult, ReplaySummary
 
         summary = ReplaySummary(
             total_requests=1,

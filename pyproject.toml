@@ -12,6 +12,14 @@ dependencies = [
     "python-dateutil>=2.8.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4.0",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
 [project.scripts]
 webhook-replay = "webhook_replay.cli:app"
 
@@ -25,3 +33,24 @@ include = ["webhook_replay*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # function call in default arg (Typer standard pattern)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

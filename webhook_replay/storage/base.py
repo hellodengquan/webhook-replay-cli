@@ -79,12 +79,9 @@ class StorageBackend(ABC):
             if filter.end_date:
                 requests = [r for r in requests if r.timestamp <= filter.end_date]
             if filter.url_pattern:
-                requests = [
-                    r for r in requests
-                    if filter.url_pattern.lower() in str(r.url).lower()
-                ]
+                requests = [r for r in requests if filter.url_pattern.lower() in str(r.url).lower()]
             if filter.offset:
-                requests = requests[filter.offset:]
+                requests = requests[filter.offset :]
             if filter.limit:
                 requests = requests[: filter.limit]
 

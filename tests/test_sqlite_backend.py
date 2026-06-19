@@ -1,8 +1,5 @@
-import json
 from datetime import datetime
 from pathlib import Path
-
-import pytest
 
 from webhook_replay.models import ArchiveFilter, WebhookRequest, WebhookStatus
 from webhook_replay.storage.sqlite_backend import SqliteStorageBackend

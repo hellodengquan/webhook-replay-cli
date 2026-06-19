@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -134,9 +133,7 @@ def archive(
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="从 JSON 文件读取请求体"),
     header: Optional[List[str]] = typer.Option(None, "--header", "-H", help="请求头，格式: Key:Value"),
     method: str = typer.Option("POST", "--method", "-X", help="HTTP 方法"),
-    signature_header: str = typer.Option(
-        "X-Webhook-Signature", "--sig-header", help="签名头名称"
-    ),
+    signature_header: str = typer.Option("X-Webhook-Signature", "--sig-header", help="签名头名称"),
     storage_type: StorageType = _storage_option,
     storage_path: Optional[Path] = _storage_path_option,
 ):
@@ -161,12 +158,9 @@ def archive(
         console.print("[red]必须提供 --body 或 --file 参数[/red]")
         raise typer.Exit(code=1)
 
-    console.print(Panel.fit(
-        f"[green]请求已归档[/green]\n"
-        f"ID: {request.id}\n"
-        f"URL: {request.url}\n"
-        f"存储: {storage_type.value}"
-    ))
+    console.print(
+        Panel.fit(f"[green]请求已归档[/green]\nID: {request.id}\nURL: {request.url}\n存储: {storage_type.value}")
+    )
 
 
 @app.command("list")
@@ -186,7 +180,7 @@ def list_requests(
         end_dt = date_parser.parse(end_date) if end_date else None
     except ValueError as e:
         console.print(f"[red]日期格式错误: {e}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     filter = ArchiveFilter(
         status=status,
@@ -205,9 +199,7 @@ def list_requests(
 def replay(
     request_id: Optional[str] = typer.Option(None, "--id", help="要重放的请求 ID"),
     all_failed: bool = typer.Option(False, "--all-failed", help="重放所有失败的请求"),
-    interactive: bool = typer.Option(
-        False, "--interactive", "-i", help="交互式选择失败请求进行重放"
-    ),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="交互式选择失败请求进行重放"),
     secret: Optional[str] = typer.Option(None, "--secret", help="签名密钥，用于重新签名"),
     resign: bool = typer.Option(False, "--resign", help="重新计算签名"),
     algorithm: HmacAlgorithm = typer.Option(
@@ -288,9 +280,7 @@ def replay(
     summary = summary_gen.generate_summary(results)
     output = summary_gen.render_summary(summary, output_format)
 
-    if output_format == SummaryFormat.JSON:
-        console.print(output)
-    elif output_format == SummaryFormat.MARKDOWN:
+    if output_format == SummaryFormat.JSON or output_format == SummaryFormat.MARKDOWN:
         console.print(output)
     else:
         console.print(Panel.fit(output, title="重放结果摘要"))
@@ -301,9 +291,7 @@ def verify_signature(
     body: str = typer.Option(..., "--body", "-b", help="请求体内容"),
     signature: str = typer.Option(..., "--signature", "-s", help="签名值"),
     secret: str = typer.Option(..., "--secret", help="签名密钥"),
-    algorithm: HmacAlgorithm = typer.Option(
-        HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"
-    ),
+    algorithm: HmacAlgorithm = typer.Option(HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"),
     max_age: int = typer.Option(300, "--max-age", help="最大允许时间差（秒）"),
 ):
     """验证 Webhook 签名"""
@@ -321,12 +309,8 @@ def verify_signature(
 def generate_signature(
     body: str = typer.Option(..., "--body", "-b", help="请求体内容"),
     secret: str = typer.Option(..., "--secret", help="签名密钥"),
-    algorithm: HmacAlgorithm = typer.Option(
-        HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"
-    ),
-    include_timestamp: bool = typer.Option(
-        True, "--timestamp/--no-timestamp", help="是否包含时间戳"
-    ),
+    algorithm: HmacAlgorithm = typer.Option(HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"),
+    include_timestamp: bool = typer.Option(True, "--timestamp/--no-timestamp", help="是否包含时间戳"),
     raw: bool = typer.Option(False, "--raw", help="只输出原始签名（不含时间戳前缀格式）"),
 ):
     """生成 Webhook 签名"""
@@ -377,9 +361,7 @@ def clear_all(
         raise typer.Exit(code=0)
 
     if not force:
-        confirm = typer.confirm(
-            f"确定要清除所有 {count} 条记录吗？此操作不可恢复！"
-        )
+        confirm = typer.confirm(f"确定要清除所有 {count} 条记录吗？此操作不可恢复！")
         if not confirm:
             console.print("[yellow]已取消[/yellow]")
             raise typer.Exit(code=0)
