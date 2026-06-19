@@ -2,10 +2,11 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-from .models import ArchiveFilter, WebhookRequest, WebhookStatus
+from ..models import ArchiveFilter, WebhookRequest, WebhookStatus
+from .base import StorageBackend
 
 
-class Storage:
+class JsonStorageBackend(StorageBackend):
     def __init__(self, base_path: Optional[Path] = None):
         self.base_path = base_path or Path.home() / ".webhook_replay"
         self.requests_file = self.base_path / "requests.json"
@@ -26,6 +27,27 @@ class Storage:
     def _save_requests(self, requests: List[dict]) -> None:
         with open(self.requests_file, "w") as f:
             json.dump(requests, f, indent=2, default=str)
+
+    def _apply_filter(self, requests: List[WebhookRequest], filter: Optional[ArchiveFilter]) -> List[WebhookRequest]:
+        if not filter:
+            return requests
+
+        if filter.status:
+            requests = [r for r in requests if r.status == filter.status]
+        if filter.start_date:
+            requests = [r for r in requests if r.timestamp >= filter.start_date]
+        if filter.end_date:
+            requests = [r for r in requests if r.timestamp <= filter.end_date]
+        if filter.url_pattern:
+            requests = [
+                r for r in requests if filter.url_pattern.lower() in str(r.url).lower()
+            ]
+        if filter.offset:
+            requests = requests[filter.offset:]
+        if filter.limit:
+            requests = requests[: filter.limit]
+
+        return requests
 
     def save_request(self, request: WebhookRequest) -> None:
         requests = self._load_requests()
@@ -48,23 +70,7 @@ class Storage:
     def list_requests(self, filter: Optional[ArchiveFilter] = None) -> List[WebhookRequest]:
         requests = self._load_requests()
         webhook_requests = [WebhookRequest.model_validate(r) for r in requests]
-
-        if filter:
-            if filter.status:
-                webhook_requests = [r for r in webhook_requests if r.status == filter.status]
-            if filter.start_date:
-                webhook_requests = [r for r in webhook_requests if r.timestamp >= filter.start_date]
-            if filter.end_date:
-                webhook_requests = [r for r in webhook_requests if r.timestamp <= filter.end_date]
-            if filter.url_pattern:
-                webhook_requests = [
-                    r for r in webhook_requests if filter.url_pattern.lower() in str(r.url).lower()
-                ]
-            if filter.offset:
-                webhook_requests = webhook_requests[filter.offset:]
-            if filter.limit:
-                webhook_requests = webhook_requests[: filter.limit]
-
+        webhook_requests = self._apply_filter(webhook_requests, filter)
         webhook_requests.sort(key=lambda r: r.timestamp, reverse=True)
         return webhook_requests
 

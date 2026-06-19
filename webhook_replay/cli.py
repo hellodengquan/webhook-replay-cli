@@ -20,9 +20,9 @@ from rich.table import Table
 from .archive import WebhookArchiver
 from .models import ArchiveFilter, WebhookRequest, WebhookStatus
 from .replay import WebhookReplayer
-from .signature import SignatureGenerator, SignatureVerifier
-from .storage import Storage
-from .summary import SummaryGenerator
+from .signature import HmacAlgorithm, SignatureGenerator, SignatureVerifier
+from .storage import Storage, StorageType
+from .summary_renderers import SummaryFormat, SummaryGenerator
 
 app = typer.Typer(
     name="webhook-replay",
@@ -32,7 +32,13 @@ app = typer.Typer(
 )
 
 console = Console()
-storage = Storage()
+
+
+def _create_storage(
+    storage_type: StorageType = StorageType.JSON,
+    storage_path: Optional[Path] = None,
+) -> Storage:
+    return Storage(storage_type, storage_path)
 
 
 def _print_request_table(requests: List[WebhookRequest], show_details: bool = False) -> None:
@@ -107,6 +113,20 @@ def _interactive_select_requests(requests: List[WebhookRequest]) -> List[Webhook
     return [req for req in selected if isinstance(req, WebhookRequest)]
 
 
+_storage_option = typer.Option(
+    StorageType.JSON,
+    "--storage",
+    "-S",
+    help="存储后端类型",
+)
+
+_storage_path_option = typer.Option(
+    None,
+    "--storage-path",
+    help="存储路径（JSON: 目录路径，SQLite: 数据库文件路径）",
+)
+
+
 @app.command("archive")
 def archive(
     url: str = typer.Option(..., "--url", "-u", help="Webhook 目标 URL"),
@@ -117,8 +137,11 @@ def archive(
     signature_header: str = typer.Option(
         "X-Webhook-Signature", "--sig-header", help="签名头名称"
     ),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """归档 Webhook 请求"""
+    storage = _create_storage(storage_type, storage_path)
     archiver = WebhookArchiver(storage)
 
     if file:
@@ -138,7 +161,12 @@ def archive(
         console.print("[red]必须提供 --body 或 --file 参数[/red]")
         raise typer.Exit(code=1)
 
-    console.print(Panel.fit(f"[green]请求已归档[/green]\nID: {request.id}\nURL: {request.url}"))
+    console.print(Panel.fit(
+        f"[green]请求已归档[/green]\n"
+        f"ID: {request.id}\n"
+        f"URL: {request.url}\n"
+        f"存储: {storage_type.value}"
+    ))
 
 
 @app.command("list")
@@ -149,6 +177,8 @@ def list_requests(
     url_pattern: Optional[str] = typer.Option(None, "--url", help="URL 匹配模式"),
     limit: Optional[int] = typer.Option(None, "--limit", "-n", help="限制数量"),
     details: bool = typer.Option(False, "--details", "-d", help="显示详细信息"),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """列出已归档的请求"""
     try:
@@ -166,6 +196,7 @@ def list_requests(
         limit=limit,
     )
 
+    storage = _create_storage(storage_type, storage_path)
     requests = storage.list_requests(filter)
     _print_request_table(requests, details)
 
@@ -179,12 +210,26 @@ def replay(
     ),
     secret: Optional[str] = typer.Option(None, "--secret", help="签名密钥，用于重新签名"),
     resign: bool = typer.Option(False, "--resign", help="重新计算签名"),
+    algorithm: HmacAlgorithm = typer.Option(
+        HmacAlgorithm.SHA256,
+        "--algorithm",
+        "-a",
+        help="HMAC 签名算法",
+    ),
     delay: int = typer.Option(0, "--delay", help="请求间隔（毫秒）"),
     limit: Optional[int] = typer.Option(None, "--limit", "-n", help="限制重放数量"),
-    output_json: bool = typer.Option(False, "--json", help="以 JSON 格式输出结果"),
+    output_format: SummaryFormat = typer.Option(
+        SummaryFormat.TEXT,
+        "--output-format",
+        "-o",
+        help="输出格式",
+    ),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """重放 Webhook 请求"""
-    replayer = WebhookReplayer(storage, secret=secret)
+    storage = _create_storage(storage_type, storage_path)
+    replayer = WebhookReplayer(storage, secret=secret, signature_algorithm=algorithm)
     requests_to_replay: List[WebhookRequest] = []
 
     if request_id:
@@ -215,6 +260,8 @@ def replay(
         raise typer.Exit(code=0)
 
     console.print(f"[cyan]准备重放 {len(requests_to_replay)} 个请求...[/cyan]")
+    if resign and secret:
+        console.print(f"[cyan]使用算法 {algorithm.value} 重新签名[/cyan]")
 
     results = []
     with Progress(
@@ -239,11 +286,14 @@ def replay(
 
     summary_gen = SummaryGenerator(storage)
     summary = summary_gen.generate_summary(results)
+    output = summary_gen.render_summary(summary, output_format)
 
-    if output_json:
-        console.print(summary_gen.format_json_summary(summary))
+    if output_format == SummaryFormat.JSON:
+        console.print(output)
+    elif output_format == SummaryFormat.MARKDOWN:
+        console.print(output)
     else:
-        console.print(Panel.fit(summary_gen.format_text_summary(summary), title="重放结果摘要"))
+        console.print(Panel.fit(output, title="重放结果摘要"))
 
 
 @app.command("verify")
@@ -251,16 +301,19 @@ def verify_signature(
     body: str = typer.Option(..., "--body", "-b", help="请求体内容"),
     signature: str = typer.Option(..., "--signature", "-s", help="签名值"),
     secret: str = typer.Option(..., "--secret", help="签名密钥"),
+    algorithm: HmacAlgorithm = typer.Option(
+        HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"
+    ),
     max_age: int = typer.Option(300, "--max-age", help="最大允许时间差（秒）"),
 ):
     """验证 Webhook 签名"""
     verifier = SignatureVerifier()
-    valid = verifier.verify(body, signature, secret, max_age=max_age)
+    valid = verifier.verify(body, signature, secret, algorithm=algorithm, max_age=max_age)
 
     if valid:
-        console.print("[green]✓ 签名验证通过[/green]")
+        console.print(f"[green]✓ 签名验证通过 (算法: {algorithm.value})[/green]")
     else:
-        console.print("[red]✗ 签名验证失败[/red]")
+        console.print(f"[red]✗ 签名验证失败 (算法: {algorithm.value})[/red]")
         raise typer.Exit(code=1)
 
 
@@ -268,20 +321,35 @@ def verify_signature(
 def generate_signature(
     body: str = typer.Option(..., "--body", "-b", help="请求体内容"),
     secret: str = typer.Option(..., "--secret", help="签名密钥"),
-    include_timestamp: bool = typer.Option(True, "--timestamp/--no-timestamp", help="是否包含时间戳"),
+    algorithm: HmacAlgorithm = typer.Option(
+        HmacAlgorithm.SHA256, "--algorithm", "-a", help="HMAC 算法"
+    ),
+    include_timestamp: bool = typer.Option(
+        True, "--timestamp/--no-timestamp", help="是否包含时间戳"
+    ),
+    raw: bool = typer.Option(False, "--raw", help="只输出原始签名（不含时间戳前缀格式）"),
 ):
     """生成 Webhook 签名"""
-    generator = SignatureGenerator(secret)
-    header_value = generator.generate_header_value(body, include_timestamp=include_timestamp)
-    console.print(f"[green]签名头值:[/green] {header_value}")
+    generator = SignatureGenerator(secret, algorithm)
+
+    if raw:
+        signature = generator.generate_raw(body)
+        console.print(f"[green]原始签名 ({algorithm.value}):[/green] {signature}")
+    else:
+        header_value = generator.generate_header_value(body, include_timestamp=include_timestamp)
+        console.print(f"[green]签名头值 ({algorithm.value}):[/green] {header_value}")
 
 
 @app.command("delete")
 def delete_request(
     request_id: str = typer.Argument(..., help="要删除的请求 ID"),
     force: bool = typer.Option(False, "--force", "-f", help="不提示确认"),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """删除指定的请求"""
+    storage = _create_storage(storage_type, storage_path)
+
     if not force:
         confirm = typer.confirm(f"确定要删除请求 {request_id} 吗？")
         if not confirm:
@@ -298,30 +366,39 @@ def delete_request(
 @app.command("clear")
 def clear_all(
     force: bool = typer.Option(False, "--force", "-f", help="不提示确认"),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """清除所有请求记录"""
+    storage = _create_storage(storage_type, storage_path)
     count = storage.count()
     if count == 0:
         console.print("[yellow]没有可清除的记录[/yellow]")
         raise typer.Exit(code=0)
 
     if not force:
-        confirm = typer.confirm(f"确定要清除所有 {count} 条记录吗？此操作不可恢复！")
+        confirm = typer.confirm(
+            f"确定要清除所有 {count} 条记录吗？此操作不可恢复！"
+        )
         if not confirm:
             console.print("[yellow]已取消[/yellow]")
             raise typer.Exit(code=0)
 
     deleted = storage.clear_all()
-    console.print(f"[green]已清除 {deleted} 条记录[/green]")
+    console.print(f"[green]已清除 {deleted} 条记录 (存储: {storage_type.value})[/green]")
 
 
 @app.command("stats")
-def show_stats():
+def show_stats(
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
+):
     """显示存储统计信息"""
+    storage = _create_storage(storage_type, storage_path)
     summary_gen = SummaryGenerator(storage)
     stats = summary_gen.get_storage_stats()
 
-    table = Table(title="存储统计")
+    table = Table(title=f"存储统计 ({storage_type.value})")
     table.add_column("状态", style="cyan")
     table.add_column("数量", style="magenta", justify="right")
 
@@ -342,9 +419,12 @@ def export_requests(
     output_file: Path = typer.Argument(..., help="输出文件路径"),
     status: Optional[WebhookStatus] = typer.Option(None, "--status", "-s", help="按状态筛选"),
     limit: Optional[int] = typer.Option(None, "--limit", "-n", help="限制数量"),
+    storage_type: StorageType = _storage_option,
+    storage_path: Optional[Path] = _storage_path_option,
 ):
     """导出请求为 JSON 文件"""
     filter = ArchiveFilter(status=status, limit=limit)
+    storage = _create_storage(storage_type, storage_path)
     requests = storage.list_requests(filter)
 
     data = [req.model_dump(mode="json") for req in requests]
